@@ -1,7 +1,8 @@
 
 # Sparse Subspace Clustering (SSC) algorithms
 
-This repository contains Matlab code to implement ADMM and proximal gradient algorithms to solve the SSC clustering problem (several variants, including variants for affine subspaces). The SSC model we work with is based on the well-known work of [Elhamifar and Vidal's Sparse "Subspace Clustering: Algorithm, Theory, and Applications" (IEEE Trans. on PAMI)](https://scholar.google.com/scholar?cluster=7262850065108933522&hl=en&as_sdt=0,6&as_vis=1) (and their code is at their [VisionLab website ](http://vision.jhu.edu/code/) ).
+This repository contains Matlab code to implement ADMM and proximal gradient algorithms to solve the SSC clustering problem (several variants, including variants for affine subspaces). The SSC model we work with is based on the well-known work of [Elhamifar and Vidal's Sparse "Subspace Clustering: Algorithm, Theory, and Applications" (IEEE Trans. on PAMI)](https://scholar.google.com/scholar?cluster=7262850065108933522&hl=en&as_sdt=0,6&as_vis=1) (and their code is at their [VisionLab website ](http://vision.jhu.edu/code/) 
+as well as their [JHUVisionLab Github site](https://github.com/JHUVisionLab/SSC-using-ADMM) ).
 
 ## Why use this code?
 
