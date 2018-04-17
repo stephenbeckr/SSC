@@ -14,7 +14,7 @@ function [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, varargin )
 %   'lambda'        regularization parameter; by default, alpha_lambda*mu
 %       (where mu is a coherence parameter; for alpha_lambda<1, C=0 is
 %       optimal );
-%   'alpha_mu'      See above
+%   'alpha_lambda'  See above
 %   'rho'           ADMM parameter; any rho>0 works, but some lead to
 %       faster convergence. Default: rho = alpha_rho*alpha_lambda;
 %   'alpha_rho'     See above
@@ -23,7 +23,13 @@ function [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, varargin )
 %       every iteration
 %   'printEvery'    How often to display to the screen (between 1 and inf)
 %   'affine'        Include ones(n,1)*C=ones(n,1) constraint (default: false)
-%   'tol'           Stopping tolerance (default: 2e-4 )
+%   'tol'           Stopping tolerance (default: 2e-4 ), based on the 
+%       absolute l_inf norm error between the two primal ADMM variables
+%   'errHistEvery'  Computes l_inf norm between two primal ADMM variables,
+%       and any user supplied errFcn, every errHistEvery iterations
+%       (default: 1 )
+%   'residHistEvery' Computes residual and objective value every
+%       residHistEvery iterations (default: 1)
 %
 % [C,errHist,resid,objective,parameters] = SSC_viaADMM( X, ... )
 %   returns output information. errHist(:,1) is the l_inf norm error
@@ -32,8 +38,10 @@ function [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, varargin )
 %   while objetive(:) is lambda/2|| X - X*C ||_F^2 + ||C||_1.
 %
 % Stephen Becker and Farhad Pourkamali-Anaraki 2018
+%   https://github.com/stephenbeckr/SSC
 % Based off algorithm of Ehsan Elhamifar and Rene Vidal 2012, but adding
 %   in an O(n^2) matrix inversion instead of O(n^3)
+%   Elhamir and Vidal paper: https://arxiv.org/abs/1203.1005
 
 
 param  = inputParser;
@@ -46,6 +54,8 @@ addParameter( param, 'lambda', [], @(l) (l>0) );
 addParameter( param, 'rho', [], @(rho) (rho>0) );
 addParameter( param, 'alpha_lambda', 800, @(a) (a>=1) );
 addParameter( param, 'alpha_rho', 1 );
+addParameter( param, 'errHistEvery', 1 ); % how often to compute errFcn and 
+addParameter( param, 'residHistEvery', 1 ); % how often to compute residual and objective
 
 
 parse(param,varargin{:});
@@ -59,6 +69,8 @@ lambda      = parameters.lambda;
 rho         = parameters.rho;
 alpha_lambda= parameters.alpha_lambda;
 alpha_rho   = parameters.alpha_rho;
+errHistEvery= parameters.errHistEvery; if isinf(errHistEvery), errHistEvery = 0; end
+residHistEvery= parameters.residHistEvery; if isinf(residHistEvery), residHistEvery = 0; end
 
 [p,n]   = size(X);
 
@@ -117,7 +129,23 @@ else
     Afun    = @(RHS) RHS/rho - (lambda/(rho^2))*(X'*(iYYt(X*RHS)) );
 end
 
+% And soft-thresholding operation
+parameters.usedFastShrinkage = false;
 softThresh  = @(X, t) sign(X).*max( 0, abs(X) - t );
+if 2==exist('tfocs_where','file')
+    if 3~=exist('shrink_mex','file')
+        addpath( fullfile( tfocs_where, 'mexFiles' ) );
+    end
+    if 3==exist('shrink_mex','file')
+        softThresh  = @(x,t) shrink_mex(x,t); 
+        parameters.usedFastShrinkage = true;
+    else
+        warning('SSC:mexNotCompiled',...
+            'Found shrink_mex.c but not compiled; we suggest trying to compile it. You can turn this warning off');
+        % to turn warning off, try   >  warning('off','SSC:mexNotCompiled');
+    end
+end
+
 
 C       = zeros(n);
 Dual1   = zeros(n);
@@ -132,22 +160,33 @@ for k = 1:maxIter
         temp = XtX + rho*( C - Dual1/rho );
     end
     Z   = Afun( temp );
-    Z   = Z - diag(diag(Z));
+    %Z   = Z - diag(diag(Z));
+    Z(1:(n+1):end) = 0; % faster version of the above
     C   = softThresh( Z + Dual1/rho, 1/rho );
-    C   = C - diag(diag(Z));
+%     C   = C - diag(diag(Z));
+    C(1:(n+1):end) = 0; % faster version of the above
     
     % Update Lagrange Multipliers
     Dual1   = Dual1 + rho*( Z - C );
     if affine, Dual2 = Dual2 + rho*( Z'*ones(n,1) - ones(n,1) ); end
     
-    errHist(k,1)    = norm( Z(:) - C(:), Inf );
-    if affine, errHist(k,1) = errHist(k,1) + norm( ones(1,n)*Z - ones(1,n), Inf ); end
+    if k==1 || ~mod( k, errHistEvery )
+        errHist(k,1)    = norm( Z(:) - C(:), Inf );
+        if affine, errHist(k,1) = errHist(k,1) + norm( ones(1,n)*Z - ones(1,n), Inf ); end
+        if ~isempty( errFcn )
+            errHist(k,2)    = errFcn( Z );
+        end
+    else
+        % for large problems, may not want to compute error every iteration
+        errHist(k,:) = errHist(k-1,:);
+    end
     
-    resid(k)    = norm( X - X*Z, 'fro' );
-    objective(k)= norm(Z(:),1) + lambda/2*resid(k)^2;
-    
-    if ~isempty( errFcn )
-        errHist(k,2)    = errFcn( Z );
+    if k==1 || ~mod( k, residHistEvery )
+        resid(k)    = norm( X - X*Z, 'fro' );
+        objective(k)= norm(Z(:),1) + lambda/2*resid(k)^2;
+    else
+        resid(k)    = resid(k-1);
+        objective(k)= objective(k-1);
     end
     
     do_break = ( errHist(k,1) < tol );
