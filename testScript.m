@@ -47,7 +47,7 @@ end
 errFcn  = @(C) norm( C - C_ref, 'fro')/norm(C_ref,'fro');
 [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, ...
     'errFcn', errFcn, 'lambda', lambdaE, 'maxIter', 3e4, 'printEvery', 5e2,...
-    'tol', 1e-12, 'affine', affine, 'alpha_rho', 1 );
+    'tol', 1e-12, 'affine', affine, 'alpha_rho', 10, 'adaptiveRho', true );
 errHist_linear_ADMM = errHist(:,2);
 
 % === and use proximal gradient solver
@@ -83,9 +83,11 @@ else
     C_ref = zeros(n);
 end
 errFcn  = @(C) norm( C - C_ref, 'fro')/norm(C_ref,'fro');
+
 [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, ...
     'errFcn', errFcn, 'lambda', lambdaE, 'maxIter', 3e4, 'printEvery', 5e2,...
-    'tol', 1e-12, 'affine', affine, 'alpha_rho',1 );
+    'tol', 1e-12, 'affine', affine, 'alpha_rho',1, 'adaptiveRho', true,...
+    'epsCurvature', .2);
 errHist_affine_ADMM = errHist(:,2);
 
 
