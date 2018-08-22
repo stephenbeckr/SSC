@@ -56,7 +56,8 @@ function [C,errHist,resid,objective,parameters] = SSC_viaADMM(X, varargin )
 
 param  = inputParser;
 addParameter( param, 'maxIter', 200, @(m) (m>=1) );
-addParameter( param, 'errFcn', [] ); % e.g., @(C) evalSSR_error( C, true_labels );
+addParameter( param, 'errFcn', [] ); % e.g., @(Z) evalSSR_error( Z, true_labels );
+addParameter( param, 'errFcn_uses_Z', true ) % use errFcn(Z) if true, or errFcn(C) if false
 addParameter( param, 'printEvery', 10 );
 addParameter( param, 'tol', 2e-4 ); % stopping tolerance
 addParameter( param, 'affine', false );
@@ -76,6 +77,7 @@ parse(param,varargin{:});
 parameters  = param.Results;
 maxIter     = parameters.maxIter;
 errFcn      = parameters.errFcn;
+errFcn_uses_Z = parameters.errFcn_uses_Z;
 printEvery  = parameters.printEvery; if isinf(printEvery), printEvery=0; end
 tol         = parameters.tol;
 affine      = parameters.affine;
@@ -200,7 +202,11 @@ for k = 1:maxIter
         errHist(k,1)    = norm( Z(:) - C(:), Inf );
         if affine, errHist(k,1) = errHist(k,1) + norm( ones(1,n)*Z - ones(1,n), Inf ); end
         if ~isempty( errFcn )
-            errHist(k,2)    = errFcn( Z );
+            if errFcn_uses_Z
+                errHist(k,2)    = errFcn( Z );
+            else
+                errHist(k,2)    = errFcn( C );
+            end
         end
     else
         % for large problems, may not want to compute error every iteration
