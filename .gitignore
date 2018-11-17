@@ -218,3 +218,8 @@ TSWLatexianTemp*
 
 # expex forward references with \gathertags
 *-tags.tex
+
+#JMF 16 Nov 2018
+saved_mats/
+profile_*
+*.mat
