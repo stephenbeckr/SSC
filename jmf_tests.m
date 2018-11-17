@@ -4,7 +4,11 @@ function [] = jmf_tests(in1, in2)
     %return
     
     if nargin >= 1
-        plot_time_scaling_driver(in1, in2);
+        if nargin == 1
+            plot_time_scaling_driver(in1);
+        elseif nargin == 2
+            plot_time_scaling_driver(in1, in2);
+        end
         return
     end
     run_time_scaling();
@@ -15,12 +19,12 @@ function [] = profile_run()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
-    n   = 600;
+    n   = 6000;
     p   = 256;
     maxIter = 30;
 
     X   = randn(p,n);
-    affine = true;
+    affine = false
     lambdaE = 1; % bogus parameter
 
     profile clear;
@@ -32,11 +36,11 @@ function [] = profile_run()
     %SSC_viaADMM(X, ...
     %    'lambda', lambdaE, 'maxIter', maxIter, 'printEvery', 1,...
     %    'tol', 1e-12, 'affine', affine, 'alpha_rho', alpha_rho, 'adaptiveRho', false,...
-    %    'errHistEvery', maxIter+100, 'residHistEvery', maxIter+100);
+    %    'errHistEvery', 1000, 'residHistEvery', 1000);
     
     % TFOCS
     % ---
-    tfocs_opts = struct( 'errFcn', @(objective,C) errFcn(reshape(C,n,n)) );
+    %tfocs_opts = struct( 'errFcn', @(objective,C) errFcn(reshape(C,n,n)) );
     tfocs_opts = struct();
     SSC_viaProxGradient(X, 'lambda', lambdaE,...
         'affine', affine, 'tfocs_opts', tfocs_opts , 'tol', 1e-6, 'maxIter', maxIter, ...
@@ -51,18 +55,22 @@ function [] = run_time_scaling()
     % Parameters for Section 4.2 of AAAI submission
     % (comes from Stephen's paper_deom_3_cont.m)
     % ---
+    rng(271828);
+
     p = 256;     % ambient dimension 
     K = 10;      % number of subspaces 
     d = 3;       % dimension of each subspace 
     sigma = 0.1; % noise standard deviation
+    %affine = true % What we really want
+    affine = false % less interesting, but easier prox to start speeding up
     rho_all = 200:50:500; % the rho used in the paper
     rho_all = round(linspace(20,50,5)); % bogus rho for quicker testing
     alpha   = [30,90];
     maxIter = 30;
-    numExp  = 1; % number of trials to run
+    numExp  = 5; % number of trials to run
 
-    ADMM_affine_times = zeros(numel(rho_all), numExp);
-    TFOCS_affine_times = zeros(numel(rho_all), numExp);
+    ADMM_times = zeros(numel(rho_all), numExp);
+    TFOCS_times = zeros(numel(rho_all), numExp);
 
     for densVal = 1 : numel(rho_all)
         rho = rho_all(densVal);
@@ -83,20 +91,20 @@ function [] = run_time_scaling()
             
             % Set up solver params
             % ---
-            affine = true; % with affine constraint
             threshold = 1e-6;
-            lambdaE = 1; % TODO JMF 16 Nov 2018: this is a bogus parameter; okay for timing though?
+            %lambdaE = []; %JMF 17 Nov 2018: if we don't specify lambda, the solver drivers will compute a lambda for us
             
             % ADMM
-            alpha_rho = 10; % TODO JMF 16 Nov 2018: this is a bogus parameter; okay for timing though?
+            alpha_rho = 1e-2; % TODO JMF 16 Nov 2018: this is a bogus parameter; okay for timing though?
+            adaptive_rho = true;
 
             t_ = tic();
             SSC_viaADMM(X, ...
-                'lambda', lambdaE, 'maxIter', maxIter, 'printEvery', 1,...
-                'tol', 1e-12, 'affine', affine, 'alpha_rho', alpha_rho, 'adaptiveRho', false,...
-                'errHistEvery', maxIter+100, 'residHistEvery', maxIter+100);
+                'maxIter', maxIter, 'printEvery', 1,...
+                'tol', 1e-12, 'affine', affine, 'alpha_rho', alpha_rho, 'adaptiveRho', adaptive_rho,...
+                'errHistEvery', maxIter, 'residHistEvery', maxIter);
             
-            ADMM_affine_times(densVal,trial) = toc(t_);
+            ADMM_times(densVal,trial) = toc(t_);
 
             % TFOCS
             %tfocs_opts = struct( 'errFcn', @(objective,C) errFcn(reshape(C,n,n)) );
@@ -104,11 +112,11 @@ function [] = run_time_scaling()
             
             t_ = tic();
             
-            SSC_viaProxGradient(X, 'lambda', lambdaE,...
+            SSC_viaProxGradient(X, ...
                 'affine', affine, 'tfocs_opts', tfocs_opts , 'tol', threshold, 'maxIter', maxIter, ...
                 'printEvery', 1);
 
-            TFOCS_affine_times(densVal,trial) = toc(t_);
+            TFOCS_times(densVal,trial) = toc(t_);
 
         end
     end
@@ -119,7 +127,7 @@ end
 
 function [] = plot_time_scaling_driver(in1, in2)
     if nargin == 1
-        data_file = string(in1)
+        data_file = string(in1);
         plot_time_scaling_single(data_file);
 
     elseif nargin == 2
@@ -136,10 +144,14 @@ end
 function [] = plot_time_scaling_single(data_file)
     load(data_file);
 
-    ADMM_affine_times_mean = mean(ADMM_affine_times, 2);
-    TFOCS_affine_times_mean = mean(TFOCS_affine_times, 2);
+    ADMM_times_mean = mean(ADMM_times, 2);
+    TFOCS_times_mean = mean(TFOCS_times, 2);
 
-    %TODO JMF 16 Nov 2018: plot std
+    ADMM_times_min = min(ADMM_times, [], 2);
+    TFOCS_times_min = min(TFOCS_times, [], 2);
+
+    ADMM_times_max = max(ADMM_times, [], 2);
+    TFOCS_times_max = max(TFOCS_times, [], 2);
 
     % Plot runtime scaling on log-log
     % ---
@@ -149,8 +161,15 @@ function [] = plot_time_scaling_single(data_file)
     clf;
     hold on;
 
-    plot(N_vec, ADMM_affine_times_mean, 'LineWidth', 2);
-    plot(N_vec, TFOCS_affine_times_mean, 'LineWidth', 2);
+    %plot(N_vec, ADMM_times_mean, 'LineWidth', 2);
+    %plot(N_vec, TFOCS_times_mean, 'LineWidth', 2);
+
+    errorbar(N_vec, ADMM_times_mean,...
+             ADMM_times_mean - ADMM_times_min, ADMM_times_max - ADMM_times_mean,...
+             'LineWidth', 2);
+    errorbar(N_vec, TFOCS_times_mean,...
+             TFOCS_times_mean - TFOCS_times_min, TFOCS_times_max - TFOCS_times_mean,...
+             'LineWidth', 2);
 
     hold off;
     
@@ -160,8 +179,14 @@ function [] = plot_time_scaling_single(data_file)
 
     xlabel('number of data points');
     ylabel('running time (sec.)');
+    
+    if adaptive_rho
+        ADMM_label = 'AADMM';
+    else
+        ADMM_label = 'ADMM';
+    end
 
-    legend('ADMM', 'TFOCS', 'Location', 'NorthWest');
+    legend(ADMM_label, 'TFOCS', 'Location', 'NorthWest');
 
 end
 
@@ -175,15 +200,29 @@ function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
         error('rho_all vector doesn''t match in both files');
     end
 
+    if S_baseline.affine ~= S_new.affine
+        error('linear/affine constraint doesn''t match in both files');
+    end
 
-    ADMM_affine_times_mean_baseline = mean(S_baseline.ADMM_affine_times, 2);
-    TFOCS_affine_times_mean_baseline = mean(S_baseline.TFOCS_affine_times, 2);
+    ADMM_times_mean_baseline = mean(S_baseline.ADMM_times, 2);
+    TFOCS_times_mean_baseline = mean(S_baseline.TFOCS_times, 2);
     
-    ADMM_affine_times_mean_new = mean(S_new.ADMM_affine_times, 2);
-    TFOCS_affine_times_mean_new = mean(S_new.TFOCS_affine_times, 2);
+    ADMM_times_min_baseline = min(S_baseline.ADMM_times, [], 2);
+    TFOCS_times_min_baseline = min(S_baseline.TFOCS_times, [], 2);
     
-    %TODO JMF 16 Nov 2018: plot std
+    ADMM_times_max_baseline = max(S_baseline.ADMM_times, [], 2);
+    TFOCS_times_max_baseline = max(S_baseline.TFOCS_times, [], 2);
 
+    
+    ADMM_times_mean_new = mean(S_new.ADMM_times, 2);
+    TFOCS_times_mean_new = mean(S_new.TFOCS_times, 2);
+    
+    ADMM_times_min_new = min(S_new.ADMM_times, [], 2);
+    TFOCS_times_min_new = min(S_new.TFOCS_times, [], 2);
+    
+    ADMM_times_max_new = max(S_new.ADMM_times, [], 2);
+    TFOCS_times_max_new = max(S_new.TFOCS_times, [], 2);
+    
     % Plot runtime scaling on log-log
     % ---
     N_vec = S_baseline.rho_all * S_baseline.K * S_baseline.d;
@@ -192,11 +231,25 @@ function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
     clf;
     hold on;
 
-    plot(N_vec, ADMM_affine_times_mean_baseline, '-', 'LineWidth', 2);
-    plot(N_vec, TFOCS_affine_times_mean_baseline, '-', 'LineWidth', 2);
+    %plot(N_vec, ADMM_times_mean_baseline, '-', 'LineWidth', 2);
+    %plot(N_vec, TFOCS_times_mean_baseline, '-', 'LineWidth', 2);
 
-    plot(N_vec, ADMM_affine_times_mean_new, '--', 'LineWidth', 2);
-    plot(N_vec, TFOCS_affine_times_mean_new, '--', 'LineWidth', 2);
+    %plot(N_vec, ADMM_times_mean_new, '--', 'LineWidth', 2);
+    %plot(N_vec, TFOCS_times_mean_new, '--', 'LineWidth', 2);
+
+    errorbar(N_vec, ADMM_times_mean_baseline,...
+             ADMM_times_mean_baseline - ADMM_times_min_baseline, ADMM_times_max_baseline - ADMM_times_mean_baseline,...
+             '-', 'LineWidth', 2);
+    errorbar(N_vec, TFOCS_times_mean_baseline,...
+             TFOCS_times_mean_baseline - TFOCS_times_min_baseline, TFOCS_times_max_baseline - TFOCS_times_mean_baseline,...
+             '-', 'LineWidth', 2);
+
+    errorbar(N_vec, ADMM_times_mean_new,...
+             ADMM_times_mean_new - ADMM_times_min_new, ADMM_times_max_new - ADMM_times_mean_new,...
+             '--', 'LineWidth', 2);
+    errorbar(N_vec, TFOCS_times_mean_new,...
+             TFOCS_times_mean_new - TFOCS_times_min_new, TFOCS_times_max_new - TFOCS_times_mean_new,...
+             '--', 'LineWidth', 2);
 
     hold off;
     
@@ -207,7 +260,19 @@ function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
     xlabel('number of data points');
     ylabel('running time (sec.)');
 
-    legend('ADMM (baseline)', 'TFOCS (baseline)', 'ADMM (new)', 'TFOCS (new)', 'Location', 'NorthWest');
+    if S_baseline.adaptive_rho
+        ADMM_label_baseline = 'AADMM (baseline)';
+    else
+        ADMM_label_baseline = 'ADMM (baseline)';
+    end
+
+    if S_new.adaptive_rho
+        ADMM_label_new = 'AADMM (new)';
+    else
+        ADMM_label_new = 'ADMM (new)';
+    end
+
+    legend(ADMM_label_baseline, 'TFOCS (baseline)', ADMM_label_new, 'TFOCS (new)', 'Location', 'NorthWest');
 
 end
 

@@ -84,7 +84,10 @@ zeroID  = true; b = 1; nCols = n; lambda_tfocs = 1/lambda;
 if affine
     prox    = prox_l1_and_sum( lambda_tfocs, b, nCols, zeroID, true );
 else
-    prox    = prox_l1_mat( lambda_tfocs, nCols, zeroID ); % no sum(x)=b constraint.
+    %prox    = prox_l1_mat( lambda_tfocs, nCols, zeroID ); % no sum(x)=b constraint.
+    
+    %JMF 17 Nov 2018: use optimized version of prox_l1_mat
+    prox    = prox_l1_mat_optimized( lambda_tfocs, nCols, zeroID ); % no sum(x)=b constraint.
 end
 
 tfocs_opts.maxIts       = maxIter;

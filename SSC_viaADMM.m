@@ -286,6 +286,11 @@ function Afun = returnProxH( X, lambda, rho, affine )
      rChol   = chol( eye(p) + 1/rho*lambda*(XXt) );
      iYYt    = @(RHS) rChol\( rChol'\RHS);
      Afun    = @(RHS) RHS/rho - (lambda/(rho^2))*(X'*(iYYt(X*RHS)) );
+
+     %JMF 17 Nov 2018: if this is like ADMM for NNLS, then we can get a faster
+     %     step by using the SVD of X.  But since X in their timing experiments
+     %     is extremely underdetermined, the cost of the fw/bw subs should be tiny.
+     %     Yup, I profiled this and iYYt is 0.5 secs vs 18.9 secs for Afun.
  end
 end
 
