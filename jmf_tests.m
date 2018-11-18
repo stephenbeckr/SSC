@@ -27,7 +27,8 @@ function [] = profile_run()
     affine = true
     lambdaE = 1; % bogus parameter
 
-    shrink_mex2(struct('num_threads', 4));
+    shrink_mex2(struct('num_threads', 8));
+    prox_l1_and_sum_worker_mex(struct('num_threads', 8));
 
     profile clear;
     profile on;
@@ -63,15 +64,20 @@ function [] = run_time_scaling()
     K = 10;      % number of subspaces 
     d = 3;       % dimension of each subspace 
     sigma = 0.1; % noise standard deviation
-    %affine = true % What we really want
-    affine = false % less interesting, but easier prox to start speeding up
+    affine = true % What we really want
+    %affine = false % less interesting, but easier prox to start speeding up
     rho_all = 200:50:500; % the rho used in the paper
     rho_all = round(linspace(20,50,5)); % bogus rho for quicker testing
     alpha   = [30,90];
     maxIter = 30;
     numExp  = 5; % number of trials to run
     
-    shrink_mex2(struct('num_threads', 4));
+    shrink_mex2(struct('num_threads', 4)); % for linear and affine constraints, 8 threads doesn't help (doesn't hurt much either)
+                                           % this prox is memory bound?
+    prox_l1_and_sum_worker_mex(struct('num_threads', 8)); % cranking up the threads of this guy does help
+                                                          % use no more that 8 threads (on my 16 core workstation)
+                                                          % so that we stay fair to ADMM & other matlab stuff (e.g. matmat)
+                                                          % which uses 8 threads.
 
     ADMM_times = zeros(numel(rho_all), numExp);
     TFOCS_times = zeros(numel(rho_all), numExp);
