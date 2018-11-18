@@ -77,12 +77,15 @@ end
 
 min_C  lambda_tfocs*||C||_1 + 1/2||X-XC||_F^2
 
-so lambda_tfocs = 1/lambda, and need to scale output objectgive function
+so lambda_tfocs = 1/lambda, and need to scale output objective function
 
 %}
 zeroID  = true; b = 1; nCols = n; lambda_tfocs = 1/lambda;
 if affine
-    prox    = prox_l1_and_sum( lambda_tfocs, b, nCols, zeroID, true );
+    %prox    = prox_l1_and_sum( lambda_tfocs, b, nCols, zeroID, true );
+    
+    %JMF 17 Nov 2018: use optimized version of prox_l1_and_sum
+    prox    = prox_l1_and_sum_optimized( lambda_tfocs, b, nCols, zeroID);
 else
     %prox    = prox_l1_mat( lambda_tfocs, nCols, zeroID ); % no sum(x)=b constraint.
     

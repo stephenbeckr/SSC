@@ -19,13 +19,15 @@ function [] = profile_run()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
-    n   = 6000;
+    n   = 600;
     p   = 256;
     maxIter = 30;
 
     X   = randn(p,n);
-    affine = false
+    affine = true
     lambdaE = 1; % bogus parameter
+
+    shrink_mex2(struct('num_threads', 4));
 
     profile clear;
     profile on;
@@ -68,6 +70,8 @@ function [] = run_time_scaling()
     alpha   = [30,90];
     maxIter = 30;
     numExp  = 5; % number of trials to run
+    
+    shrink_mex2(struct('num_threads', 4));
 
     ADMM_times = zeros(numel(rho_all), numExp);
     TFOCS_times = zeros(numel(rho_all), numExp);

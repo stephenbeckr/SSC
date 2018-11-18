@@ -122,11 +122,12 @@ Afun    = returnProxH( X, lambda, rho, affine );
 parameters.usedFastShrinkage = false;
 softThresh  = @(X, t) sign(X).*max( 0, abs(X) - t );
 if 2==exist('tfocs_where','file')
-    if 3~=exist('shrink_mex','file')
+    if 3~=exist('shrink_mex2','file')
         addpath( fullfile( tfocs_where, 'mexFiles' ) );
     end
-    if 3==exist('shrink_mex','file')
-        softThresh  = @(x,t) shrink_mex(x,t); 
+    if 3==exist('shrink_mex2','file')
+        %softThresh  = @(x,t) shrink_mex(x,t); 
+        softThresh  = @(x,t) shrink_mex2(x,t); 
         parameters.usedFastShrinkage = true;
     else
         warning('SSC:mexNotCompiled',...
