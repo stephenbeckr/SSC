@@ -122,11 +122,12 @@ Afun    = returnProxH( X, lambda, rho, affine );
 parameters.usedFastShrinkage = false;
 softThresh  = @(X, t) sign(X).*max( 0, abs(X) - t );
 if 2==exist('tfocs_where','file')
-    if 3~=exist('shrink_mex','file')
+    if 3~=exist('shrink_mex2','file')
         addpath( fullfile( tfocs_where, 'mexFiles' ) );
     end
-    if 3==exist('shrink_mex','file')
-        softThresh  = @(x,t) shrink_mex(x,t); 
+    if 3==exist('shrink_mex2','file')
+        %softThresh  = @(x,t) shrink_mex(x,t); 
+        softThresh  = @(x,t) shrink_mex2(x,t); 
         parameters.usedFastShrinkage = true;
     else
         warning('SSC:mexNotCompiled',...
@@ -286,6 +287,11 @@ function Afun = returnProxH( X, lambda, rho, affine )
      rChol   = chol( eye(p) + 1/rho*lambda*(XXt) );
      iYYt    = @(RHS) rChol\( rChol'\RHS);
      Afun    = @(RHS) RHS/rho - (lambda/(rho^2))*(X'*(iYYt(X*RHS)) );
+
+     %JMF 17 Nov 2018: if this is like ADMM for NNLS, then we can get a faster
+     %     step by using the SVD of X.  But since X in their timing experiments
+     %     is extremely underdetermined, the cost of the fw/bw subs should be tiny.
+     %     Yup, I profiled this and iYYt is 0.5 secs vs 18.9 secs for Afun.
  end
 end
 
