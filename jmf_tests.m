@@ -1,21 +1,33 @@
 function [] = jmf_tests(in1, in2)
     
-    %profile_run();
+    %profile_run_l1();
     %return
+    %if nargin >= 1
+    %    if nargin == 1
+    %        plot_time_scaling_driver_l1(in1);
+    %    elseif nargin == 2
+    %        plot_time_scaling_driver_l1(in1, in2);
+    %    end
+    %    return
+    %end
+    %run_time_scaling_l1();
+ 
+    profile_run_l0();
+    return
+    %if nargin >= 1
+    %    if nargin == 1
+    %        plot_time_scaling_driver_l0(in1);
+    %    elseif nargin == 2
+    %        plot_time_scaling_driver_l0(in1, in2);
+    %    end
+    %    return
+    %end
+    %run_time_scaling_l0();
     
-    if nargin >= 1
-        if nargin == 1
-            plot_time_scaling_driver(in1);
-        elseif nargin == 2
-            plot_time_scaling_driver(in1, in2);
-        end
-        return
-    end
-    run_time_scaling();
-
 end
 
-function [] = profile_run()
+%% SSC-l1
+function [] = profile_run_l1()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
@@ -51,10 +63,9 @@ function [] = profile_run()
     
     profile off
 
-
 end
 
-function [] = run_time_scaling()
+function [] = run_time_scaling_l1()
     % Parameters for Section 4.2 of AAAI submission
     % (comes from Stephen's paper_deom_3_cont.m)
     % ---
@@ -135,7 +146,7 @@ function [] = run_time_scaling()
 
 end
 
-function [] = plot_time_scaling_driver(in1, in2)
+function [] = plot_time_scaling_driver_l1(in1, in2)
     if nargin == 1
         data_file = string(in1);
         plot_time_scaling_single(data_file);
@@ -151,7 +162,7 @@ function [] = plot_time_scaling_driver(in1, in2)
 
 end
 
-function [] = plot_time_scaling_single(data_file)
+function [] = plot_time_scaling_single_l1(data_file)
     load(data_file);
 
     ADMM_times_mean = mean(ADMM_times, 2);
@@ -200,7 +211,7 @@ function [] = plot_time_scaling_single(data_file)
 
 end
 
-function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
+function [] = plot_time_scaling_compare_l1(data_file_baseline, data_file_new)
     S_baseline = load(data_file_baseline);
     S_new = load(data_file_new);
 
@@ -285,4 +296,37 @@ function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
     legend(ADMM_label_baseline, 'TFOCS (baseline)', ADMM_label_new, 'TFOCS (new)', 'Location', 'NorthWest');
 
 end
+
+
+%% SSC-l0
+function [] = profile_run_l0()
+    profile off;
+    clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
+    
+    n   = 600;
+    p   = 64;
+    k = 10;
+    maxIter = 30;
+
+    X   = randn(p,n);
+    affine = false
+
+    profile clear;
+    profile on;
+    
+    % SSC-l0 via nonconvex proximal gradient method
+    % ---
+    driver = @SSC_viaNonconvexProxGradient;
+    
+    driver = @SSC_viaNonconvexProxGradient2;
+    proj_largest_k_mex(struct('num_threads', 4));
+    
+    driver(X, k, 'affine', affine, ...
+        'tol', 1e-6, 'maxIter', maxIter, 'printEvery', 1);
+    
+    profile off
+
+end
+
+
 
