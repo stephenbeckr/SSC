@@ -14,15 +14,11 @@ function [] = jmf_tests(in1, in2)
  
     profile_run_l0();
     return
-    %if nargin >= 1
-    %    if nargin == 1
-    %        plot_time_scaling_driver_l0(in1);
-    %    elseif nargin == 2
-    %        plot_time_scaling_driver_l0(in1, in2);
-    %    end
-    %    return
-    %end
-    %run_time_scaling_l0();
+    if nargin >= 1
+        plot_time_scaling_l0(in1);
+        return
+    end
+    run_time_scaling_l0();
     
 end
 
@@ -303,12 +299,17 @@ function [] = profile_run_l0()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
-    n   = 600;
+    n   = 10000;
     p   = 64;
     k = 10;
     maxIter = 30;
 
     X   = randn(p,n);
+    %inds = find(randn(p,n) > 2);
+    %X = sparse(p,n);
+    %X(inds) = randn(numel(inds),1);
+    %nnz(X)/prod(size(X))
+
     affine = false
 
     profile clear;
@@ -319,14 +320,92 @@ function [] = profile_run_l0()
     driver = @SSC_viaNonconvexProxGradient;
     
     driver = @SSC_viaNonconvexProxGradient2;
-    proj_largest_k_mex(struct('num_threads', 4));
+    proj_largest_k_mex(struct('num_threads', 8));
     
     driver(X, k, 'affine', affine, ...
-        'tol', 1e-6, 'maxIter', maxIter, 'printEvery', 1);
+        'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
     
     profile off
 
 end
 
+function [] = run_time_scaling_l0()
+    rng(271828);
 
+    p = 64;
+    n_vec = round(logspace(2,4,10));
+    k = 10;
+    affine = true; %TODO haven't sped up this prox yet
+    affine = false;
+    maxIter = 30;
+    numExp  = 5; % number of trials to run
+ 
+    proj_largest_k_mex(struct('num_threads', 8));
 
+    orig_times = zeros(numel(n_vec), numExp);
+    new_times = zeros(numel(n_vec), numExp);
+
+    for i=1:numel(n_vec);
+        n = n_vec(i);
+        X = randn(p,n);
+        %inds = find(randn(p,n) > 2);
+        %X = sparse(p,n);
+        %X(inds) = randn(numel(inds),1);
+        %nnz(X)/prod(size(X))
+        
+        for trial=1:numExp
+            t_ = tic();
+            SSC_viaNonconvexProxGradient(X, k, ...
+                    'affine', affine, 'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
+            orig_times(i,trial) = toc(t_);
+
+            t_ = tic();
+            SSC_viaNonconvexProxGradient2(X, k, ...
+                    'affine', affine, 'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
+            new_times(i,trial) = toc(t_);
+        end
+    end
+
+    save('time_scaling_data.mat');
+end
+
+function [] = plot_time_scaling_l0(data_file)
+    load(data_file)
+    
+    orig_times_mean = mean(orig_times, 2);
+    new_times_mean = mean(new_times, 2);
+
+    orig_times_max = max(orig_times, [], 2);
+    new_times_max = max(new_times, [], 2);
+    
+    orig_times_min = min(orig_times, [], 2);
+    new_times_min = min(new_times, [], 2);
+
+    % Plot runtime scaling on log-log
+    % ---
+    figure(1);
+    clf;
+    hold on;
+
+    errorbar(n_vec, orig_times_mean,...
+             orig_times_mean - orig_times_min, orig_times_max - orig_times_mean,...
+             'LineWidth', 2);
+    errorbar(n_vec, new_times_mean,...
+             new_times_mean - new_times_min, new_times_max - new_times_mean,...
+             'LineWidth', 2);
+    
+    plot(n_vec, 1e-2*(n_vec/n_vec(1)), 'k--');
+    plot(n_vec, 1e-2*(n_vec/n_vec(1)).^2, 'k--');
+
+    hold off;
+    
+    set(gca, 'xscale', 'log');
+    set(gca, 'yscale', 'log');
+    xlim([n_vec(1) n_vec(end)]);
+
+    xlabel('number of data points');
+    ylabel('running time (sec.)');
+
+    legend('\\ell\_0 - Original', '\\ell\_0 - New', 'Location', 'NorthWest');
+
+end

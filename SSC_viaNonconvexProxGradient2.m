@@ -10,7 +10,10 @@ function [C,errHist] = SSC_viaNonconvexProxGradient( X, sparsity, varargin )
 %       1'*C = 1
 %
 %   where X is a p x N matrix of data, and C is a N x N variable
-%   
+%
+%TODO JMF 2 Dec 2018: I don't think this is right...
+%     CC is dense and same size as C, which is N x N.  We can do it block-wise,
+%     which is more memory-friendly.
 %   This code keeps C as a sparse matrix only
 %   
 % [C,errHist] = lowMemoryHardThresholdingSSC( X, sparsity, 'param', value )
@@ -101,36 +104,20 @@ C           = sparse(zeros(N));     % the main variable
 for k = 1:maxIter
 
     if blockSize >= N
-        resid   = X*C - X;
+        resid   = full(X*C - X);
         CC      = C - step*(X'* resid );    % gradient step; C is sparse but CC may not be sparse
-        %for col = 1:N
-        %    selfRow = col;
-        %    ind     = [1:selfRow-1,selfRow+1:N];
-        %    x       = CC(ind,col);
-        %    x       = proj( x, sparsity ); % project to be sparse
-        %    if nnz(x) > sparsity, error('Did not project correctly!'); end
-        %    CC(selfRow,col)  = 0;
-        %    CC(ind,col)  = x;
-        %end
-        %C   = sparse(CC);
         C = proj(CC, sparsity); % C is sparse
+
     else
         % Loop, in order to keep it lower memory
         startInd = 1;
         for block = 1:ceil(N/blockSize)
             endInd      = min( N, startInd + blockSize - 1 );
             nCols_block = endInd - startInd + 1;
+
             resid   = X*C(:,startInd:endInd) - X(:,startInd:endInd);
             CC      = C(:,startInd:endInd) - step*(X'* resid );
-            %for col = 1:nCols_block
-            %    selfRow = col + startInd - 1;
-            %    ind     = [1:selfRow-1,selfRow+1:N];
-            %    x       = CC(ind,col);
-            %    x       = proj( x, sparsity ); % project to be sparse
-            %    if nnz(x) > sparsity, error('Did not project correctly!'); end
-            %    CC(selfRow,col)  = 0;
-            %    CC(ind,col)  = x;
-            %end
+            
             CC = proj(CC, sparsity); % CC is sparse
             
             C(:,startInd:endInd)    = CC;
