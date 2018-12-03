@@ -1,9 +1,9 @@
 /**
  * Implements the projection
  *      min_y   ||y - x||_2
- *      s.t.    ||y||_0 <= k
+ *      s.t.    ||y||_0 = k
  *
- * That is, this finds the closest point to x with only k non-zero entries.
+ * That is, this finds the closest point to x with exactly k non-zero entries.
  *
  * When given matrix input, this performs the operation columnwise.
  * It can also enforce diag(Y) == 0.
@@ -16,6 +16,7 @@
  *		Mode 2 (zero diagonal):
  * 			% X is [nRows x nCols]
  * 			% zeroID = true enforces diag(Y) == 0
+ * 			% Note that k must be less than nRows (k < nRows) when zeroID is true
  *			Y = proj_largest_k_mex(X, k, zeroID);
  *
  *		Mode 3 (sparse output):
@@ -73,11 +74,12 @@ void Options::parseStruct(const mxArray *mstruct) {
     }
 }
 
-class FullProjK {
+class ProjLargestK {
 public:
     // Project the vector x onto its largest k values.
     // y is an array with n elements, just like x.  This assumes y is filled with
-    // zeros before the call.
+    // zeros before the call.  y can also be null, in which case we find inds
+    // but don't set any values of y.  This is useful for the sparseOutput mode.
     // If zero_ind >= 0, don't use x[zero_ind].  This is used for zeroID mode.
     void run(double *y,
              const double *x,
@@ -85,16 +87,24 @@ public:
              size_t k,
              ptrdiff_t zero_ind=-1);
 
+    // Sort inds[0:k-1].  Used for sparseOutput mode
+    inline void sort_inds(size_t k) {
+        std::sort(inds_.begin(), inds_.begin() + k);
+    }
+
+    // Raw access to the inds data
+    const size_t* inds() const { return inds_.data(); }
+
 private:
     std::vector<size_t> inds_;
 
 };
 
-void FullProjK::run(double *y,
-                    const double *x,
-                    size_t n,
-                    size_t k,
-                    ptrdiff_t zero_ind) {
+void ProjLargestK::run(double *y,
+                       const double *x,
+                       size_t n,
+                       size_t k,
+                       ptrdiff_t zero_ind) {
 
     // Gonna do an "argsort"
     // We want to get the inds of the top k largest values of abs(x)
@@ -129,8 +139,11 @@ void FullProjK::run(double *y,
     }
 
     // Copy largest k values to y
-    for (size_t i=0; i<k; ++i) {
-        y[inds_[i]] = x[inds_[i]];
+    // Or if y is null, don't do that
+    if (nullptr != y) {
+        for (size_t i=0; i<k; ++i) {
+            y[inds_[i]] = x[inds_[i]];
+        }
     }
 }
 
@@ -189,6 +202,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         }
     }
 
+    if (k == nRows && zero_diag) {
+        mexErrMsgTxt("k == nRows with zero_diag is infeasible.");
+    }
+
     // Fourth input
     bool sparse_output = false;
     if (nrhs >= 4) {
@@ -200,7 +217,65 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     // Y will be a sparse matrix
     if (sparse_output) {
-        mexErrMsgTxt("not implemented");
+        /*
+         * We've got a bit of a special case here.  We know exactly how many
+         * non-zeros will be in the array.  And we know exactly how many elements
+         * will be in each row.  This makes constructing the compressed sparse
+         * matrix a bit easier.
+         *
+         * There are k non-zeros per column.  So we allocate storage for k*nCols
+         * non-zeros. This also means that we know Jc a priori, which means we
+         * can parallelize things super nicely.
+         */
+        size_t nnz = k*nCols; // total number of non-zeros in this matrix
+                              // (except for the edge case identified above)
+        plhs[0] = mxCreateSparse(nRows, nCols, nnz, mxREAL);
+        size_t *Ir = mxGetIr(plhs[0]); // length nnz
+        size_t *Jc = mxGetJc(plhs[0]); // length nCols + 1
+        double *Pr = mxGetPr(plhs[0]); // length nnz
+
+        if (nCols == 1) { // don't do zeroID for vectors
+            ProjLargestK proj;
+            proj.run(nullptr, X, nRows, k);
+
+            proj.sort_inds(k);
+            const size_t *inds = proj.inds();
+
+            Jc[0] = 0;
+            Jc[1] = k;
+            for (size_t i=0; i<k; ++i) {
+                // Y[inds[i]] = Y[inds[i]]
+                Ir[i] = inds[i];
+                Pr[i] = X[inds[i]];
+            }
+
+        } else {
+            Jc[0] = 0;
+            #pragma omp parallel num_threads(opt.num_threads)
+            {
+                ProjLargestK proj;
+                const size_t *inds;
+
+                #pragma omp for schedule(static)
+                for (size_t j=0; j<nCols; ++j) {
+                    if (zero_diag) {
+                        proj.run(nullptr, X + nRows*j, nRows, k, j);
+                    } else {
+                        proj.run(nullptr, X + nRows*j, nRows, k);
+                    }
+
+                    proj.sort_inds(k);
+                    inds = proj.inds();
+
+                    Jc[j+1] = (j+1)*k;
+                    for (size_t i=0; i<k; ++i) {
+                        // Y[inds[i],j] = X[inds[i],j]
+                        Ir[k*j + i] = inds[i];
+                        Pr[k*j + i] = X[nRows*j + inds[i]];
+                    }
+                }
+            }
+        }
 
     // Y is gonna be a full matrix
     } else {
@@ -209,13 +284,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         double *Y = mxGetPr(plhs[0]);
 
         if (nCols == 1) { // don't do zeroID for vectors
-            FullProjK proj;
+            ProjLargestK proj;
             proj.run(Y, X, nRows, k);
 
         } else {
             #pragma omp parallel num_threads(opt.num_threads)
             {
-                FullProjK proj;
+                ProjLargestK proj;
 
                 #pragma omp for schedule(static)
                 for (size_t j=0; j<nCols; ++j) {

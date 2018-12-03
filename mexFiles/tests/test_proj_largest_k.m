@@ -1,7 +1,7 @@
 function [] = test_proj_largest_k()
     
     check_correctness()
-    %time_single_run()
+    time_single_run()
 
 end
 
@@ -14,7 +14,7 @@ function [] = check_correctness()
     k = 3;
     x = randn(n_rows, n_cols);
     zeroID = true;
-    sparseOutput = false;
+    sparseOutput = true;
     
     % Make the prox operators
     proj_ref = @(x) proj_largest_k(x, k, zeroID);
@@ -25,6 +25,7 @@ function [] = check_correctness()
     
     %y_ref
     %y_test
+    %full(y_test)
 
     rel_err = norm(y_ref - y_test, 'fro') / norm(y_ref, 'fro');
     fprintf('relative error = %1.5e\n', rel_err);
@@ -42,7 +43,7 @@ function [] = time_single_run()
     k = 10;
     x = randn(n_cols, n_cols);
     zeroID = true;
-    sparseOutput = false;
+    sparseOutput = true;
 
     % Make the prox operator
     proj = @(x) proj_largest_k(x, k, zeroID);
