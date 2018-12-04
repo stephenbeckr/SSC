@@ -47,7 +47,7 @@ function [] = time_single_run()
 
     % Make the prox operator
     proj = @(x) proj_largest_k(x, k, zeroID);
-    proj_largest_k_mex(struct('num_threads', 4));
+    proj_largest_k_mex(struct('num_threads', 8));
     proj = @(x) proj_largest_k_mex(x, k, zeroID, sparseOutput);
 
     % Warm up

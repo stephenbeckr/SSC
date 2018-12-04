@@ -2,6 +2,7 @@ function makeMex()
 % Script to install mex files
 
 compileForMatlabWithOptions('proj_largest_k_mex.cc')
+compileForMatlabWithOptions('proj_largest_k_affine_mex.cc')
 
 end
 

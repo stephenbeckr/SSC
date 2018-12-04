@@ -244,7 +244,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             Jc[0] = 0;
             Jc[1] = k;
             for (size_t i=0; i<k; ++i) {
-                // Y[inds[i]] = Y[inds[i]]
+                // Y[inds[i]] = X[inds[i]]
                 Ir[i] = inds[i];
                 Pr[i] = X[inds[i]];
             }
