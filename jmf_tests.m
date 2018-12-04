@@ -1,21 +1,29 @@
 function [] = jmf_tests(in1, in2)
     
-    %profile_run();
+    %profile_run_l1();
     %return
-    
+    %if nargin >= 1
+    %    if nargin == 1
+    %        plot_time_scaling_driver_l1(in1);
+    %    elseif nargin == 2
+    %        plot_time_scaling_driver_l1(in1, in2);
+    %    end
+    %    return
+    %end
+    %run_time_scaling_l1();
+ 
+    %profile_run_l0();
+    %return
     if nargin >= 1
-        if nargin == 1
-            plot_time_scaling_driver(in1);
-        elseif nargin == 2
-            plot_time_scaling_driver(in1, in2);
-        end
+        plot_time_scaling_l0(in1);
         return
     end
-    run_time_scaling();
-
+    run_time_scaling_l0();
+    
 end
 
-function [] = profile_run()
+%% SSC-l1
+function [] = profile_run_l1()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
@@ -51,10 +59,9 @@ function [] = profile_run()
     
     profile off
 
-
 end
 
-function [] = run_time_scaling()
+function [] = run_time_scaling_l1()
     % Parameters for Section 4.2 of AAAI submission
     % (comes from Stephen's paper_deom_3_cont.m)
     % ---
@@ -135,7 +142,7 @@ function [] = run_time_scaling()
 
 end
 
-function [] = plot_time_scaling_driver(in1, in2)
+function [] = plot_time_scaling_driver_l1(in1, in2)
     if nargin == 1
         data_file = string(in1);
         plot_time_scaling_single(data_file);
@@ -151,7 +158,7 @@ function [] = plot_time_scaling_driver(in1, in2)
 
 end
 
-function [] = plot_time_scaling_single(data_file)
+function [] = plot_time_scaling_single_l1(data_file)
     load(data_file);
 
     ADMM_times_mean = mean(ADMM_times, 2);
@@ -200,7 +207,7 @@ function [] = plot_time_scaling_single(data_file)
 
 end
 
-function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
+function [] = plot_time_scaling_compare_l1(data_file_baseline, data_file_new)
     S_baseline = load(data_file_baseline);
     S_new = load(data_file_new);
 
@@ -286,3 +293,122 @@ function [] = plot_time_scaling_compare(data_file_baseline, data_file_new)
 
 end
 
+
+%% SSC-l0
+function [] = profile_run_l0()
+    profile off;
+    clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
+    
+    n   = 3000;
+    p   = 64;
+    k = 10;
+    maxIter = 30;
+
+    X   = randn(p,n);
+    %inds = find(randn(p,n) > 2);
+    %X = sparse(p,n);
+    %X(inds) = randn(numel(inds),1);
+    %nnz(X)/prod(size(X))
+
+    affine = false
+
+    profile clear;
+    profile on;
+    
+    % SSC-l0 via nonconvex proximal gradient method
+    % ---
+    driver = @SSC_viaNonconvexProxGradient;
+    
+    driver = @SSC_viaNonconvexProxGradient2;
+    proj_largest_k_mex(struct('num_threads', 8));
+    proj_largest_k_affine_mex(struct('num_threads', 8));
+    
+    driver(X, k, 'affine', affine, ...
+        'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
+    
+    profile off
+
+end
+
+function [] = run_time_scaling_l0()
+    rng(271828);
+
+    p = 64;
+    n_vec = round(logspace(2,4,10));
+    k = 10;
+    affine = true;
+    %affine = false;
+    maxIter = 30;
+    numExp  = 5; % number of trials to run
+ 
+    proj_largest_k_mex(struct('num_threads', 8));
+    proj_largest_k_affine_mex(struct('num_threads', 8));
+
+    orig_times = zeros(numel(n_vec), numExp);
+    new_times = zeros(numel(n_vec), numExp);
+
+    for i=1:numel(n_vec);
+        n = n_vec(i);
+        X = randn(p,n);
+        %inds = find(randn(p,n) > 2);
+        %X = sparse(p,n);
+        %X(inds) = randn(numel(inds),1);
+        %nnz(X)/prod(size(X))
+        
+        for trial=1:numExp
+            t_ = tic();
+            SSC_viaNonconvexProxGradient(X, k, ...
+                    'affine', affine, 'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
+            orig_times(i,trial) = toc(t_);
+
+            t_ = tic();
+            SSC_viaNonconvexProxGradient2(X, k, ...
+                    'affine', affine, 'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
+            new_times(i,trial) = toc(t_);
+        end
+    end
+
+    save('time_scaling_data.mat');
+end
+
+function [] = plot_time_scaling_l0(data_file)
+    load(data_file)
+    
+    orig_times_mean = mean(orig_times, 2);
+    new_times_mean = mean(new_times, 2);
+
+    orig_times_max = max(orig_times, [], 2);
+    new_times_max = max(new_times, [], 2);
+    
+    orig_times_min = min(orig_times, [], 2);
+    new_times_min = min(new_times, [], 2);
+
+    % Plot runtime scaling on log-log
+    % ---
+    figure(1);
+    clf;
+    hold on;
+
+    errorbar(n_vec, orig_times_mean,...
+             orig_times_mean - orig_times_min, orig_times_max - orig_times_mean,...
+             'LineWidth', 2);
+    errorbar(n_vec, new_times_mean,...
+             new_times_mean - new_times_min, new_times_max - new_times_mean,...
+             'LineWidth', 2);
+    
+    plot(n_vec, new_times_mean(1)*(n_vec/n_vec(1)), 'k--');
+    plot(n_vec, new_times_mean(1)*(n_vec/n_vec(1)).^2, 'k--');
+
+    hold off;
+    
+    set(gca, 'xscale', 'log');
+    set(gca, 'yscale', 'log');
+    xlim([n_vec(1) n_vec(end)]);
+
+    xlabel('number of data points');
+    ylabel('running time (sec.)');
+
+    legend('\\ell\_0 - Original', '\\ell\_0 - New', 'Location', 'NorthWest');
+    title(sprintf('SSC \\ell_0 affine=%d', affine));
+
+end

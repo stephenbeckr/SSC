@@ -223,3 +223,7 @@ TSWLatexianTemp*
 saved_mats/
 profile_*
 *.mat
+.cproject
+.project
+.settings
+
