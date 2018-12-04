@@ -12,8 +12,8 @@ function [] = jmf_tests(in1, in2)
     %end
     %run_time_scaling_l1();
  
-    profile_run_l0();
-    return
+    %profile_run_l0();
+    %return
     if nargin >= 1
         plot_time_scaling_l0(in1);
         return
@@ -299,7 +299,7 @@ function [] = profile_run_l0()
     profile off;
     clear all; % profile clear doesn't clear all the way or something... this seems to do it though.
     
-    n   = 10000;
+    n   = 3000;
     p   = 64;
     k = 10;
     maxIter = 30;
@@ -321,6 +321,7 @@ function [] = profile_run_l0()
     
     driver = @SSC_viaNonconvexProxGradient2;
     proj_largest_k_mex(struct('num_threads', 8));
+    proj_largest_k_affine_mex(struct('num_threads', 8));
     
     driver(X, k, 'affine', affine, ...
         'tol', -1e-6, 'maxIter', maxIter, 'printEvery', 1);
@@ -335,12 +336,13 @@ function [] = run_time_scaling_l0()
     p = 64;
     n_vec = round(logspace(2,4,10));
     k = 10;
-    affine = true; %TODO haven't sped up this prox yet
-    affine = false;
+    affine = true;
+    %affine = false;
     maxIter = 30;
     numExp  = 5; % number of trials to run
  
     proj_largest_k_mex(struct('num_threads', 8));
+    proj_largest_k_affine_mex(struct('num_threads', 8));
 
     orig_times = zeros(numel(n_vec), numExp);
     new_times = zeros(numel(n_vec), numExp);
@@ -394,8 +396,8 @@ function [] = plot_time_scaling_l0(data_file)
              new_times_mean - new_times_min, new_times_max - new_times_mean,...
              'LineWidth', 2);
     
-    plot(n_vec, 1e-2*(n_vec/n_vec(1)), 'k--');
-    plot(n_vec, 1e-2*(n_vec/n_vec(1)).^2, 'k--');
+    plot(n_vec, new_times_mean(1)*(n_vec/n_vec(1)), 'k--');
+    plot(n_vec, new_times_mean(1)*(n_vec/n_vec(1)).^2, 'k--');
 
     hold off;
     
@@ -407,5 +409,6 @@ function [] = plot_time_scaling_l0(data_file)
     ylabel('running time (sec.)');
 
     legend('\\ell\_0 - Original', '\\ell\_0 - New', 'Location', 'NorthWest');
+    title(sprintf('SSC \\ell_0 affine=%d', affine));
 
 end

@@ -70,7 +70,9 @@ end
 
 if affine
     %proj = @(x,sparsity) GSHP( x, b, sparsity );
-    error('not mexified');
+    zero_diag = true;
+    sparse_output = true;
+    proj = @(x,sparsity) proj_largest_k_affine_mex(x, sparsity, b, zero_diag, sparse_output);
 else
     %proj = @(x,sparsity) findLargestK( x, sparsity );
     zero_diag = true;
@@ -164,67 +166,3 @@ end
 end % end of main routine
 
 
-
-% === Subroutines ===
-function [x, S] = GSHP(b,lambda, K)
-% [x, S] = GSHP(b,lambda, K)
-% Computes a minimizer to the problem
-%   min_x || x - b ||_2^2
-% s.t.
-%   x has at most k nonzeros
-%   sum(x) == lambda
-%
-% GSHP stands for "Greedy Selector and Hyperplane Projector"
-% This version does *not* allow for a weighted sum, but it is possible
-%   to do that.
-%
-% This version DOES allow "b" to be a matrix
-%   and in that case, the output "x" is a matrix, and the output
-%   is equivalent to looping over the columns of x and b.
-%   ("lambda" is the same for all columns, though this could easily
-%    be changed if necessary)
-%
-% Stephen Becker, 2/217/2018
-% Follows code from "Sparse Projections onto the Simplex"
-%   by Kyrillidis, Becker, Ceverh, Kock, ICML 2013
-%   Available at arXiv.org/abs/1206.1529
-%   (In that algorithm, their "w" is our "b")
-
-[~,j] = max( lambda*b ); % automatically vectorized over columns
-S     = j;
-nCols = size(b,2);
-if nCols == 1
-    for l = 2:K
-        offset = (sum(b(S),1)-lambda)/(l-1);
-        resid  = abs( b - offset );
-        resid(S) = 0; % make sure we don't select an old index
-        [~,j]   = max( resid );
-        S       = sort([S;j]);
-    end
-    % final projection
-    xS  = b(S) - ( sum(b(S)) - lambda)/K;
-    x   = zeros(size(b,1),1);
-    x( S ) = xS;
-    
-else
-    for l = 2:K
-        offset = zeros(1,nCols);
-        for j = 1:nCols
-            offset(j) = (sum(b(S(:,j),j),1)-lambda)/(l-1);
-        end
-        resid  = abs( b - offset );
-        for j = 1:nCols
-            resid(S(:,j),j) = 0; 
-        end
-        [~,j]   = max( resid );
-        S       = [S;j];
-    end
-    % final projection
-    x   = zeros(size(b,1),nCols);
-    for j = 1:nCols
-        SS  = S(:,j);
-        xS  = b(SS,j) - ( sum(b(SS,j)) - lambda)/K;
-        x( SS, j ) = xS;
-    end
-end
-end % end of GSHP subroutine
