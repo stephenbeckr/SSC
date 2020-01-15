@@ -1,5 +1,5 @@
 function [C,TFOCSout, TFOCSopts, parameters] = SSC_viaProxGradient(X, varargin )
-% C = SSC_viaADMM( X )
+% C = SSC_viaProxGradient( X )
 %   solves the Sparse Subspace Clustering problem of Vidal et al.
 %   using an accelerated proximal gradient algorithm (e.g. FISTA)
 %   i.e., solves
@@ -48,6 +48,7 @@ addParameter( param, 'lambda', [], @(l) (l>0) );
 addParameter( param, 'alpha_lambda', 800, @(a) (a>=1) );
 addParameter( param, 'tfocs_opts', [] );
 addParameter( param, 'initialGuess', [] );
+addParameter( param, 'mu_correlation', [] );
 
 
 parse(param,varargin{:});
@@ -60,14 +61,18 @@ lambda      = parameters.lambda;
 alpha_lambda= parameters.alpha_lambda;
 tfocs_opts  = parameters.tfocs_opts;
 c0          = parameters.initialGuess;
+mu_correlation  = parameters.mu_correlation;
 
 [p,n]   = size(X);
 
 % Use conventions of Ehsan Elhamifar and Rene Vidal's 2012 paper
-XtX     = X'*X; % n x n
 if isempty( lambda )
-    temp    = abs( XtX - diag(diag(XtX)) );
-    mu_correlation = min(max(temp)); % eq (11) in our arXiv paper
+    if isempty(mu_correlation)
+        XtX     = X'*X; % n x n
+        temp    = abs( XtX - diag(diag(XtX)) );
+        mu_correlation = min(max(temp)); % eq (11) in our arXiv paper
+        parameters.mu_correlation   = mu_correlation;
+    end
     lambda  = alpha_lambda/mu_correlation; % "lambda_E" in arXiv paper
     parameters.lambda = lambda;
 end
